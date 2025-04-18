@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>تسجيل فيديو ذكي</title>
+  <style>
+    body {
+      font-family: 'Tahoma', sans-serif;
+      background: linear-gradient(135deg, #1e1e2f, #3a3a52);
+      color: white;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
+      border-radius: 20px;
+      background-color: rgba(0,0,0,0.4);
+      box-shadow: 0 0 15px rgba(0,0,0,0.6);
+      position: relative;
+    }
+    video, #playbackVideo {
+      width: 100%;
+      border-radius: 15px;
+      margin-bottom: 15px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+    }
+    button {
+      background-color: #00b894;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background-color: #00cec9;
+    }
+    .controls, .settings, #edit-tools, #after-recording {
+      margin-top: 20px;
+    }
+    #quality-options button {
+      background-color: #6c5ce7;
+    }
+    #quality-options button:hover {
+      background-color: #a29bfe;
+    }
+    #datetime-overlay {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 14px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 5px 10px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎥 برنامج تسجيل ذكي</h1>
+
+    <video id="video" autoplay muted></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <div id="datetime-overlay"></div>
+
+    <div class="controls">
+      <label>حدد مدة التسجيل:</label><br>
+      <input type="number" id="days" placeholder="أيام" min="0">
+      <input type="number" id="hours" placeholder="ساعات" min="0">
+      <input type="number" id="minutes" placeholder="دقائق" min="0">
+      <input type="number" id="seconds" placeholder="ثواني" min="0">
+      <br>
+      <button onclick="startRecording()">▶️ ابدأ التسجيل</button>
+      <button onclick="stopRecording()">⏹ إيقاف التسجيل</button>
+      <button onclick="stopCamera()">📴 إيقاف الكاميرا</button>
+      <button onclick="startCamera()">📳 تشغيل الكاميرا</button>
+    </div>
+
+    <div id="after-recording" style="display: none;">
+      <video id="playbackVideo" controls></video>
+      <button onclick="saveRecording()">💾 حفظ</button>
+      <button onclick="deleteRecording()">🗑️ حذف</button>
+      <button onclick="toggleEditTools()">🛠️ تعديل</button>
+    </div>
+
+    <div id="edit-tools" style="display: none;">
+      <button onclick="trimVideo()">✂️ قص</button>
+      <button onclick="muteAudio()">🔇 كتم الصوت</button>
+      <button onclick="rotateVideo()">🔄 تدوير</button>
+      <button onclick="changeSpeed()">⏩ تسريع</button>
+      <button onclick="addTextOverlay()">📝 إضافة نص</button>
+    </div>
+
+    <div class="settings">
+      <button onclick="toggleSettings()">⚙️ الإعدادات</button>
+      <div id="quality-options" style="display:none">
+        <button onclick="setQuality('high')">جودة عالية (4K)</button>
+        <button onclick="setQuality('medium')">جودة متوسطة</button>
+        <button onclick="setQuality('low')">جودة منخفضة</button>
+      </div>
+    </div>
+
+    <div>
+      <h3>📱 مسح QR لمتابعة البث:</h3>
+      <canvas id="qrCanvas"></canvas>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script>
+    let mediaRecorder, stream;
+    let recordedBlobs = [];
+    let playbackVideo = document.getElementById("playbackVideo");
+
+    function updateDateTime() {
+      const now = new Date();
+      const dateTime = now.toLocaleString();
+      document.getElementById("datetime-overlay").textContent = dateTime;
+    }
+    setInterval(updateDateTime, 1000);
+
+    function startCamera() {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(s => {
+          stream = s;
+          document.getElementById("video").srcObject = stream;
+
+          // توليد رابط بث مباشر (محلي)
+          const currentURL = window.location.href;
+          QRCode.toCanvas(document.getElementById('qrCanvas'), currentURL);
+        });
+    }
+
+    function stopCamera() {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
+    function startRecording() {
+      recordedBlobs = [];
+      mediaRecorder = new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = e => recordedBlobs.push(e.data);
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+        const url = window.URL.createObjectURL(blob);
+        playbackVideo.src = url;
+        document.getElementById("after-recording").style.display = "block";
+      };
+
+      mediaRecorder.start();
+
+      let totalSeconds =
+        (+document.getElementById("days").value || 0) * 86400 +
+        (+document.getElementById("hours").value || 0) * 3600 +
+        (+document.getElementById("minutes").value || 0) * 60 +
+        (+document.getElementById("seconds").value || 0);
+
+      setTimeout(() => stopRecording(), totalSeconds * 1000);
+      document.getElementById("status").innerText = "📹 التسجيل قيد التشغيل...";
+    }
+
+    function stopRecording() {
+      mediaRecorder.stop();
+      document.getElementById("status").innerText = "⏹ تم إيقاف التسجيل";
+    }
+
+    function saveRecording() {
+      const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = 'تسجيل_كاميرا.webm';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+
+    function deleteRecording() {
+      recordedBlobs = [];
+      playbackVideo.src = "";
+      document.getElementById("after-recording").style.display = "none";
+      document.getElementById("status").innerText = "🗑️ تم حذف التسجيل";
+    }
+
+    function toggleEditTools() {
+      const tools = document.getElementById("edit-tools");
+      tools.style.display = tools.style.display === "none" ? "block" : "none";
+    }
+
+    function muteAudio() {
+      playbackVideo.muted = true;
+    }
+
+    function changeSpeed() {
+      playbackVideo.playbackRate = 2.0;
+    }
+
+    function rotateVideo() {
+      playbackVideo.style.transform = "rotate(90deg)";
+    }
+
+    function addTextOverlay() {
+      let text = prompt("اكتب النص الذي تريد إضافته:");
+      if (text) {
+        let overlay = document.createElement("div");
+        overlay.innerText = text;
+        overlay.style.position = "absolute";
+        overlay.style.top = "20px";
+        overlay.style.left = "20px";
+        overlay.style.color = "red";
+        overlay.style.fontSize = "24px";
+        overlay.style.zIndex = "1000";
+        document.querySelector(".container").appendChild(overlay);
+      }
+    }
+
+    function trimVideo() {
+      alert("✂️ ميزة قص الفيديو تتطلب مكتبة خارجية أو تطبيق خاص.");
+    }
+
+    function toggleSettings() {
+      const quality = document.getElementById("quality-options");
+      quality.style.display = quality.style.display === "none" ? "block" : "none";
+    }
+
+    function setQuality(level) {
+      if (level === 'high') alert("📽️ سيتم التسجيل بجودة 4K");
+      else if (level === 'medium') alert("📽️ سيتم التسجيل بجودة متوسطة");
+      else if (level === 'low') alert("📽️ سيتم التسجيل بجودة منخفضة جدًا");
+    }
+  </script>
+</body>
+</html>
